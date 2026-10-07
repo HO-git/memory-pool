@@ -1,0 +1,58 @@
+# memory-pool ChapterX patch
+# Base: antra-tess/chapterx main @ 5d4584590a2e82d8a76b376cc1329e1c32ed40a4 (2026-10-02)
+# Apply from the ChapterX checkout root, after copying memory-pool.ts into src/tools/plugins/:
+#   git apply /path/to/memory-pool/adapters/chapterx/chapterx.patch
+diff --git a/src/agent/loop.ts b/src/agent/loop.ts
+index 3c09aa8..1067139 100644
+--- a/src/agent/loop.ts
++++ b/src/agent/loop.ts
+@@ -1865,6 +1865,28 @@ export class AgentLoop {
+                 }
+               }
+               
++              // memory-pool gets structured recent messages (author ids, bot
++              // flags) so it can tell who triggered the activation and save the
++              // exchange under real message ids.
++              if (pluginName === 'memory-pool' && pluginInstanceConfig) {
++                const recentCount = pluginInstanceConfig.recent_messages || 30
++                const recentMsgs = discordContext.messages.slice(-recentCount)
++                pluginInstanceConfig = {
++                  ...pluginInstanceConfig,
++                  _botUserId: this.botUserId,
++                  _recentMessagesRaw: recentMsgs.map((m: any) => ({
++                    id: m.id,
++                    authorId: m.author?.id,
++                    authorName: m.author?.displayName || m.author?.username,
++                    isBot: !!m.author?.bot,
++                    content: m.content || '',
++                    ts: m.timestamp instanceof Date ? m.timestamp.getTime() : Date.now(),
++                    channelId: m.channelId,
++                    guildId: m.guildId,
++                  })),
++                }
++              }
++
+               // Skip disabled plugins (state_scope: 'off')
+               if (pluginInstanceConfig?.state_scope === 'off') {
+                 logger.debug({ pluginName }, 'Skipping disabled plugin (state_scope: off)')
+diff --git a/src/tools/plugins/index.ts b/src/tools/plugins/index.ts
+index 0fd9c3d..be90414 100644
+--- a/src/tools/plugins/index.ts
++++ b/src/tools/plugins/index.ts
+@@ -14,6 +14,7 @@ import mcpResourcesPlugin from './mcp-resources.js'
+ import timerPlugin from './timer.js'
+ import characterPlugin from './character.js'
+ import sleepPlugin from './sleep.js'
++import { memoryPoolPlugin, memoryPoolRecallPlugin } from './memory-pool.js'
+ 
+ // Register all available plugins
+ export const availablePlugins: Record<string, ToolPlugin> = {
+@@ -26,6 +27,8 @@ export const availablePlugins: Record<string, ToolPlugin> = {
+   'timer': timerPlugin,
+   'character': characterPlugin,
+   'sleep': sleepPlugin,
++  'memory-pool': memoryPoolPlugin,
++  'memory-pool-recall': memoryPoolRecallPlugin,
+ }
+ 
+ export * from './types.js'

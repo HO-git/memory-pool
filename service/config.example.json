@@ -1,0 +1,25 @@
+{
+  "global": {
+    "paused": false,
+    "debug": false
+  },
+  "bots": {
+    "my-agent": {
+      "recall": false,
+      "autoSave": true,
+      "collection": "mem_my_agent",
+      "embeddingModel": "openai/text-embedding-3-large",
+      "embeddingDimensions": 3072,
+      "memoryLimit": 5,
+      "scoreThreshold": 0.3,
+      "minMessageLength": 5,
+      "chunkMinSize": 1200,
+      "chunkMaxSize": 1500,
+      "chunkTimeoutMs": 120000,
+      "selfSpeaker": "My Agent",
+      "speakerAliases": {
+        "123456789012345678": "PersonaName"
+      }
+    }
+  }
+}

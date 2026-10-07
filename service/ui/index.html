@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memory-pool</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f26; --border: #2c313c; --text: #d7dae0;
+    --dim: #8b93a1; --accent: #7aa2f7; --ok: #9ece6a; --warn: #e0af68; --err: #f7768e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 16px; margin: 0; }
+  header .pill { font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--dim); }
+  header .pill.ok { color: var(--ok); border-color: var(--ok); }
+  header .pill.err { color: var(--err); border-color: var(--err); }
+  nav { display: flex; gap: 4px; padding: 8px 20px 0; }
+  nav button { background: none; border: none; color: var(--dim); padding: 8px 14px; cursor: pointer; font-size: 14px; border-bottom: 2px solid transparent; }
+  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
+  main { padding: 16px 20px 60px; max-width: 1000px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 14px; margin: 0 0 10px; color: var(--accent); }
+  label { display: block; font-size: 12px; color: var(--dim); margin: 8px 0 2px; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 5px; padding: 6px 8px; font: inherit;
+  }
+  textarea { font-family: ui-monospace, monospace; font-size: 12px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 140px; }
+  .check { display: inline-flex; align-items: center; gap: 6px; margin-right: 18px; font-size: 13px; }
+  button.btn { background: var(--accent); color: #10121a; border: none; border-radius: 5px; padding: 7px 14px; cursor: pointer; font: inherit; font-weight: 600; }
+  button.btn.secondary { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+  button.btn.danger { background: var(--err); }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  .mem { border-bottom: 1px solid var(--border); padding: 10px 0; }
+  .mem:last-child { border-bottom: none; }
+  .mem .meta { font-size: 12px; color: var(--dim); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .mem .text { white-space: pre-wrap; margin: 4px 0; font-size: 13px; }
+  .badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); }
+  .badge.pool { color: var(--accent); border-color: var(--accent); }
+  .badge.st { color: var(--warn); border-color: var(--warn); }
+  .badge.score { color: var(--ok); border-color: var(--ok); }
+  .act { font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; gap: 10px; }
+  .act .k { min-width: 66px; text-transform: uppercase; font-size: 11px; padding-top: 2px; }
+  .act .k.retrieve { color: var(--accent); } .act .k.save { color: var(--ok); }
+  .act .k.error { color: var(--err); } .act .k.admin { color: var(--warn); }
+  .act time { color: var(--dim); font-size: 12px; min-width: 130px; }
+  .muted { color: var(--dim); font-size: 12px; }
+  #toast { position: fixed; bottom: 16px; right: 16px; background: var(--panel); border: 1px solid var(--accent);
+    border-radius: 6px; padding: 10px 16px; display: none; }
+  a.x { color: var(--err); cursor: pointer; text-decoration: none; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>memory-pool</h1>
+  <span class="pill" id="pill-qdrant">qdrant: …</span>
+  <span class="pill" id="pill-embed">embeddings: …</span>
+  <span class="pill" id="pill-paused" style="display:none">PAUSED</span>
+</header>
+<nav>
+  <button data-tab="status" class="active">Status</button>
+  <button data-tab="settings">Settings</button>
+  <button data-tab="memories">Memories</button>
+  <button data-tab="activity">Activity</button>
+</nav>
+<main>
+  <section id="tab-status">
+    <div class="card"><h2>Service</h2><div id="status-body" class="muted">loading…</div></div>
+  </section>
+
+  <section id="tab-settings" style="display:none">
+    <div class="card">
+      <h2>Global</h2>
+      <label class="check"><input type="checkbox" id="g-paused"> paused (kill-switch: no retrieval, no saving)</label>
+      <label class="check"><input type="checkbox" id="g-debug"> debug logging</label>
+    </div>
+    <div id="bots-settings"></div>
+    <button class="btn" id="save-config">Save settings</button>
+    <span class="muted" id="save-note"></span>
+  </section>
+
+  <section id="tab-memories" style="display:none">
+    <div class="card">
+      <div class="row">
+        <div><label>Bot</label><select id="m-bot"></select></div>
+        <div><label>Source filter</label>
+          <select id="m-source"><option value="">all</option><option value="pool">memory-pool</option><option value="st">SillyTavern</option></select>
+        </div>
+        <div style="flex:2"><label>Semantic search (same pipeline as live retrieval)</label>
+          <input type="text" id="m-search" placeholder="type a query and press Enter — empty Enter goes back to browsing">
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <button class="btn secondary" id="m-refresh">Refresh</button>
+        <button class="btn secondary" id="m-snapshot">Snapshot collection</button>
+        <button class="btn danger" id="m-nuke">Delete ALL memory-pool points</button>
+        <span class="muted" id="m-counts"></span>
+      </div>
+    </div>
+    <div class="card"><div id="m-list" class="muted">loading…</div>
+      <button class="btn secondary" id="m-more" style="display:none;margin-top:8px">Load more</button>
+    </div>
+  </section>
+
+  <section id="tab-activity" style="display:none">
+    <div class="card">
+      <label class="check"><input type="checkbox" id="a-auto" checked> auto-refresh (5s)</label>
+      <div id="a-list" class="muted">loading…</div>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let config = null, memOffset = null, memSearchMode = false;
+
+function toast(msg, isErr) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.style.borderColor = isErr ? 'var(--err)' : 'var(--accent)';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3500);
+}
+async function api(path, opts) {
+  const res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts));
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || res.status);
+  return data;
+}
+function esc(s) { const d = document.createElement('span'); d.textContent = s ?? ''; return d.innerHTML; }
+function fmtTs(ts) { return ts ? new Date(ts).toLocaleString() : ''; }
+
+// ---- tabs ----
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('main section').forEach(s => s.style.display = 'none');
+  $('#tab-' + b.dataset.tab).style.display = '';
+  if (b.dataset.tab === 'memories') loadMemories(true);
+  if (b.dataset.tab === 'activity') loadActivity();
+  if (b.dataset.tab === 'settings') renderSettings();
+});
+
+// ---- status ----
+async function loadStatus() {
+  try {
+    const s = await api('/api/status');
+    $('#pill-qdrant').textContent = 'qdrant: ' + (s.qdrant.reachable ? 'connected' : 'UNREACHABLE');
+    $('#pill-qdrant').className = 'pill ' + (s.qdrant.reachable ? 'ok' : 'err');
+    $('#pill-embed').textContent = 'embeddings: ' + s.embeddings.provider;
+    $('#pill-embed').className = 'pill' + (s.embeddings.provider === 'stub' ? ' err' : ' ok');
+    $('#pill-paused').style.display = s.paused ? '' : 'none';
+    $('#status-body').innerHTML =
+      `<div>Qdrant: <b>${esc(s.qdrant.url)}</b> — ${s.qdrant.reachable ? 'reachable' : '<span style="color:var(--err)">unreachable</span>'}</div>` +
+      Object.entries(s.bots).map(([name, b]) =>
+        `<div style="margin-top:8px"><b>${esc(name)}</b> → ${esc(b.collection)}<br>
+         <span class="muted">recall ${b.recall ? 'on' : 'off'} · auto-save ${b.autoSave ? 'on' : 'OFF'} ·
+         ${b.buffered} buffered · ${b.seenIds} seen ids</span></div>`).join('');
+  } catch (e) { $('#status-body').textContent = 'status failed: ' + e.message; }
+}
+
+// ---- settings ----
+async function loadConfig() { config = await api('/api/config'); }
+function renderSettings() {
+  if (!config) return;
+  $('#g-paused').checked = config.global.paused;
+  $('#g-debug').checked = config.global.debug;
+  $('#bots-settings').innerHTML = Object.entries(config.bots).map(([name, b]) => `
+    <div class="card" data-bot="${esc(name)}">
+      <h2>${esc(name)}</h2>
+      <label class="check"><input type="checkbox" class="f" data-k="recall" ${b.recall ? 'checked' : ''}> recall (search) enabled</label>
+      <label class="check"><input type="checkbox" class="f" data-k="autoSave" ${b.autoSave ? 'checked' : ''}> auto-save enabled</label>
+      <div class="row">
+        <div><label>collection</label><input type="text" class="f" data-k="collection" value="${esc(b.collection)}"></div>
+        <div><label>self speaker (agent name)</label><input type="text" class="f" data-k="selfSpeaker" value="${esc(b.selfSpeaker)}"></div>
+      </div>
+      <div class="row">
+        <div><label>memories per search</label><input type="number" class="f" data-k="memoryLimit" value="${b.memoryLimit}"></div>
+        <div><label>score threshold</label><input type="number" step="0.05" class="f" data-k="scoreThreshold" value="${b.scoreThreshold}"></div>
+        <div><label>min message length</label><input type="number" class="f" data-k="minMessageLength" value="${b.minMessageLength}"></div>
+      </div>
+      <div class="row">
+        <div><label>chunk min (chars)</label><input type="number" class="f" data-k="chunkMinSize" value="${b.chunkMinSize}"></div>
+        <div><label>chunk max (chars)</label><input type="number" class="f" data-k="chunkMaxSize" value="${b.chunkMaxSize}"></div>
+        <div><label>chunk timeout (ms)</label><input type="number" class="f" data-k="chunkTimeoutMs" value="${b.chunkTimeoutMs}"></div>
+      </div>
+      <div class="row">
+        <div><label>embedding model</label><input type="text" class="f" data-k="embeddingModel" value="${esc(b.embeddingModel)}"></div>
+        <div><label>dimensions</label><input type="number" class="f" data-k="embeddingDimensions" value="${b.embeddingDimensions}"></div>
+      </div>
+      <label>speaker aliases (user id → name, JSON)</label>
+      <textarea class="f" data-k="speakerAliases" rows="3">${esc(JSON.stringify(b.speakerAliases, null, 2))}</textarea>
+    </div>`).join('');
+}
+$('#save-config').onclick = async () => {
+  try {
+    const next = JSON.parse(JSON.stringify(config));
+    next.global.paused = $('#g-paused').checked;
+    next.global.debug = $('#g-debug').checked;
+    document.querySelectorAll('#bots-settings .card').forEach(card => {
+      const bot = next.bots[card.dataset.bot];
+      card.querySelectorAll('.f').forEach(f => {
+        const k = f.dataset.k;
+        if (f.type === 'checkbox') bot[k] = f.checked;
+        else if (f.type === 'number') bot[k] = Number(f.value);
+        else if (f.tagName === 'TEXTAREA') bot[k] = JSON.parse(f.value);
+        else bot[k] = f.value;
+      });
+    });
+    await api('/api/config', { method: 'PUT', body: JSON.stringify(next) });
+    config = next;
+    toast('Settings saved (hot-reloaded)');
+    loadStatus();
+  } catch (e) { toast('Save failed: ' + e.message, true); }
+};
+
+// ---- memories ----
+function botOptions() {
+  $('#m-bot').innerHTML = Object.keys(config?.bots ?? {}).map(n => `<option>${esc(n)}</option>`).join('');
+}
+function renderHits(list, isSearch) {
+  return list.map(p => {
+    const pay = isSearch ? p : (p.payload || {});
+    const src = pay.source ? String(pay.source) : 'sillytavern';
+    return `<div class="mem" data-id="${esc(String(p.id))}">
+      <div class="meta">
+        <span class="badge ${pay.source ? 'pool' : 'st'}">${esc(src)}</span>
+        ${isSearch ? `<span class="badge score">${(p.score * 100).toFixed(0)}%</span>` : ''}
+        <span>${esc(pay.speakers ?? '')}</span>
+        <time>${fmtTs(pay.timestamp)}</time>
+        <a class="x" data-del="${esc(String(p.id))}">delete</a>
+      </div>
+      <div class="text">${esc(pay.text ?? '')}</div>
+    </div>`;
+  }).join('') || '<div class="muted">no points</div>';
+}
+async function loadMemories(reset) {
+  if (!config) await loadConfig();
+  if (!$('#m-bot').options.length) botOptions();
+  const bot = $('#m-bot').value;
+  if (!bot) { $('#m-list').textContent = 'no bots configured'; return; }
+  if (reset) { memOffset = null; memSearchMode = false; $('#m-search').value = ''; }
+  try {
+    const src = $('#m-source').value;
+    const q = new URLSearchParams({ bot, limit: '20' });
+    if (src) q.set('source', src);
+    if (memOffset) q.set('offset', String(memOffset));
+    const data = await api('/api/points?' + q);
+    const html = renderHits(data.points, false);
+    if (memOffset) $('#m-list').insertAdjacentHTML('beforeend', html);
+    else $('#m-list').innerHTML = html;
+    memOffset = data.nextOffset;
+    $('#m-more').style.display = memOffset ? '' : 'none';
+    $('#m-counts').textContent = ` ${data.counts.total} points (${data.counts.pool} written by memory-pool)`;
+    bindDeletes(bot);
+  } catch (e) { $('#m-list').textContent = 'load failed: ' + e.message; }
+}
+function bindDeletes(bot) {
+  document.querySelectorAll('[data-del]').forEach(a => a.onclick = async () => {
+    if (!confirm('Delete this memory point?')) return;
+    try {
+      await api('/api/points/delete', { method: 'POST', body: JSON.stringify({ bot, ids: [a.dataset.del] }) });
+      a.closest('.mem').remove();
+      toast('Point deleted');
+    } catch (e) { toast('Delete failed: ' + e.message, true); }
+  });
+}
+$('#m-search').addEventListener('keydown', async e => {
+  if (e.key !== 'Enter') return;
+  const query = $('#m-search').value.trim();
+  if (!query) { loadMemories(true); return; }
+  memSearchMode = true; $('#m-more').style.display = 'none';
+  try {
+    const data = await api('/api/search', { method: 'POST', body: JSON.stringify({ bot: $('#m-bot').value, query }) });
+    $('#m-list').innerHTML = renderHits(data.hits, true);
+    bindDeletes($('#m-bot').value);
+  } catch (err) { $('#m-list').textContent = 'search failed: ' + err.message; }
+});
+$('#m-refresh').onclick = () => loadMemories(true);
+$('#m-bot').onchange = () => loadMemories(true);
+$('#m-source').onchange = () => loadMemories(true);
+$('#m-more').onclick = () => loadMemories(false);
+$('#m-snapshot').onclick = async () => {
+  try {
+    const d = await api('/api/snapshot', { method: 'POST', body: JSON.stringify({ bot: $('#m-bot').value }) });
+    toast('Snapshot created: ' + d.snapshot);
+  } catch (e) { toast('Snapshot failed: ' + e.message, true); }
+};
+$('#m-nuke').onclick = async () => {
+  const bot = $('#m-bot').value;
+  if (!confirm(`Delete EVERY point memory-pool wrote in ${config.bots[bot].collection}? SillyTavern's memories are untouched.`)) return;
+  try {
+    const d = await api('/api/points/delete', { method: 'POST', body: JSON.stringify({ bot, source: 'pool' }) });
+    toast(`Deleted ${d.deleted} memory-pool point(s)`);
+    loadMemories(true);
+  } catch (e) { toast('Bulk delete failed: ' + e.message, true); }
+};
+
+// ---- activity ----
+async function loadActivity() {
+  try {
+    const list = await api('/api/activity?limit=150');
+    // The innerHTML rebuild collapses every <details> — remember which blocks
+    // are open (keyed by entry timestamp+kind) and restore them after render.
+    const openKeys = new Set(Array.from(document.querySelectorAll('#a-list details[open]')).map(d => d.dataset.k));
+    $('#a-list').innerHTML = list.map(a => {
+      const { returned, ...rest } = a.data || {};
+      const meta = Object.keys(rest).length ? ' <span class="muted">' + esc(JSON.stringify(rest)) + '</span>' : '';
+      const key = esc(String(a.ts) + ':' + a.kind);
+      const block = returned
+        ? `<details data-k="${key}"${openKeys.has(String(a.ts) + ':' + a.kind) ? ' open' : ''} style="margin-top:4px"><summary class="muted" style="cursor:pointer">show returned memories</summary><pre style="white-space:pre-wrap;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px">${esc(returned)}</pre></details>`
+        : '';
+      return `<div class="act"><time>${fmtTs(a.ts)}</time><span class="k ${a.kind}">${a.kind}</span>
+      <span>${a.bot ? '<b>' + esc(a.bot) + '</b> · ' : ''}${esc(a.detail)}${meta}${block}</span></div>`;
+    }).join('') || '<div class="muted">no activity yet</div>';
+  } catch (e) { $('#a-list').textContent = 'failed: ' + e.message; }
+}
+setInterval(() => {
+  if ($('#tab-activity').style.display !== 'none' && $('#a-auto').checked) loadActivity();
+  loadStatus();
+}, 5000);
+
+// ---- init ----
+(async () => { await loadConfig(); loadStatus(); })();
+</script>
+</body>
+</html>

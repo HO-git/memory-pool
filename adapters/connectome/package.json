@@ -1,0 +1,13 @@
+{
+  "name": "memory-pool-connectome",
+  "private": true,
+  "type": "module",
+  "description": "Type-check tooling for the Connectome adapter. Nothing here is published; the host loads index.ts directly.",
+  "scripts": {
+    "check": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@animalabs/agent-framework": "^0.21.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,13 @@
+# systemd user unit: copy to ~/.config/systemd/user/, adjust the paths, then
+#   systemctl --user daemon-reload && systemctl --user enable --now memory-pool
+[Unit]
+Description=memory-pool: shared embedded conversation memory
+
+[Service]
+WorkingDirectory=%h/memory-pool/service
+ExecStart=%h/.bun/bin/bun src/index.ts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

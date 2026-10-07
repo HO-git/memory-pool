@@ -1,0 +1,15 @@
+{
+  "name": "memory-pool-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared embedded conversation memory for SillyTavern (st-qdrant-memory), Connectome and ChapterX: one Qdrant pool, many interfaces",
+  "scripts": {
+    "start": "bun src/index.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.13",
+    "typescript": "^7.0.2"
+  }
+}
