@@ -46,6 +46,8 @@ export interface SaveMessage {
   /** Unix ms */
   ts: number;
   channel_id?: string;
+  /** Human-readable channel name (e.g. "#general"), stored on the chunk. */
+  channel_name?: string;
   guild_id?: string;
 }
 
@@ -73,6 +75,7 @@ export interface MemoryHit {
   messageIds: string;
   source?: string;
   channelId?: string;
+  channelName?: string;
 }
 
 export interface RetrieveResponse {
@@ -81,7 +84,7 @@ export interface RetrieveResponse {
   count: number;
 }
 
-/** st-qdrant-memory compatible point payload (superset: source/channelId/guildId are additive) */
+/** st-qdrant-memory compatible point payload (superset: source/channelId/channelName/guildId are additive) */
 export interface ChunkPayload {
   text: string;
   speakers: string;
@@ -92,6 +95,7 @@ export interface ChunkPayload {
   /** Which interface wrote the chunk. Points without it were written by SillyTavern. */
   source: string;
   channelId?: string;
+  channelName?: string;
   guildId?: string;
 }
 

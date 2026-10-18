@@ -73,6 +73,8 @@ interface FrameworkLike {
   getAgent?(name: string): AgentLike | null;
   getAllAgents?(): AgentLike[];
   getActiveTurnTrigger?(agentName: string): { reason?: string; channelId?: string } | undefined;
+  /** The MCPL channel registry, for channel names. */
+  readonly channels?: { getDescriptor?(channelId: string): { label?: string } | undefined } | null;
 }
 
 interface AgentLike {
@@ -93,6 +95,8 @@ interface Hit {
   speakers: string;
   timestamp: number;
   source?: string;
+  channelId?: string;
+  channelName?: string;
 }
 
 /** The module name: the agent sees its tool as `archive--recall`. */
@@ -209,7 +213,7 @@ export class MemoryPoolModule implements Module {
     const userMessages = woke.filter((m) => this.isSavedUser(m)).map((m) => {
       const author = m.metadata?.author as { id?: unknown; name?: string };
       const ts = m.timestamp instanceof Date ? m.timestamp.getTime() : Date.parse(String(m.timestamp));
-      return withChannel({
+      return this.withChannel({
         speaker_kind: 'user',
         user_id: String(author.id),
         speaker_name: author.name,
@@ -222,7 +226,7 @@ export class MemoryPoolModule implements Module {
     const triggerId = String(trigger.metadata?.messageId);
     if (this.speechTurn?.triggerId !== triggerId) this.speechTurn = { triggerId, n: 0 };
     this.speechTurn.n += 1;
-    const reply = withChannel({
+    const reply = this.withChannel({
       speaker_kind: 'self',
       text,
       message_id: `self-${triggerId}-${this.speechTurn.n}`,
@@ -283,7 +287,7 @@ export class MemoryPoolModule implements Module {
         return { success: true, data: 'Recall is turned off in the memory service right now.' };
       }
       const hits = Array.isArray(res.hits) ? (res.hits as Hit[]) : [];
-      return { success: true, data: hits.length > 0 ? formatHits(hits) : 'No matching memories.' };
+      return { success: true, data: hits.length > 0 ? formatHits(hits, (id) => this.channelName(id)) : 'No matching memories.' };
     } catch (err) {
       return {
         success: false,
@@ -296,6 +300,26 @@ export class MemoryPoolModule implements Module {
   // =========================================================================
   // Helpers
   // =========================================================================
+
+  /** The channel's display name from the host's channel registry, if known. */
+  private channelName(channelId: string | undefined): string | undefined {
+    if (!channelId) return undefined;
+    try {
+      const label = this.framework?.channels?.getDescriptor?.(channelId)?.label;
+      return typeof label === 'string' && label.trim() ? label.trim() : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private withChannel(message: Record<string, unknown>, channelId: string): Record<string, unknown> {
+    message.channel_id = channelId;
+    const name = this.channelName(channelId);
+    if (name) message.channel_name = name;
+    const guildId = guildOf(channelId);
+    if (guildId) message.guild_id = guildId;
+    return message;
+  }
 
   private isSavedUser(m: StoredMessage): boolean {
     const author = m.metadata?.author as { id?: unknown } | undefined;
@@ -410,13 +434,6 @@ function rawText(metadata: Record<string, unknown> | undefined, content: Content
   return textOf(content ?? []);
 }
 
-function withChannel(message: Record<string, unknown>, channelId: string): Record<string, unknown> {
-  message.channel_id = channelId;
-  const guildId = guildOf(channelId);
-  if (guildId) message.guild_id = guildId;
-  return message;
-}
-
 /** The platform a channel belongs to (`discord:…` → `discord`), recorded as the chunk's source. */
 function sourceOf(channelId: string | undefined): string {
   const platform = (channelId ?? '').split(':')[0] ?? '';
@@ -429,12 +446,14 @@ function guildOf(channelId: string | undefined): string | undefined {
   return parts.length === 3 && parts[1] && parts[1] !== 'dm' ? parts[1] : undefined;
 }
 
-/** Recall results with each excerpt's date and source. Points SillyTavern
- *  wrote carry no `source`. */
-function formatHits(hits: Hit[]): string {
+/** Recall results with each excerpt's date and where it happened. Points
+ *  SillyTavern wrote carry no `source`; older pool points carry no channel
+ *  name, so it is looked up from their channel id when the host knows it. */
+function formatHits(hits: Hit[], nameOf: (channelId: string | undefined) => string | undefined): string {
   const blocks = hits.map((hit, i) => {
     const date = hit.timestamp ? new Date(hit.timestamp).toISOString().slice(0, 10) : 'undated';
-    const source = hit.source ?? 'sillytavern';
+    const channel = hit.channelName ?? nameOf(hit.channelId);
+    const source = [hit.source ?? 'sillytavern', channel].filter(Boolean).join(' ');
     // Chunk text starts with its own "[YYYY-MM-DD]" line; the header has the date.
     const body = hit.text.replace(/^\[\d{4}-\d{2}-\d{2}\]\n/, '').trim();
     const score = Math.round(hit.score * 100);

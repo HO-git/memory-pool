@@ -51,6 +51,7 @@ export async function retrieve(
     messageIds: String(hit.payload.messageIds ?? ''),
     source: hit.payload.source ? String(hit.payload.source) : undefined,
     channelId: hit.payload.channelId ? String(hit.payload.channelId) : undefined,
+    channelName: hit.payload.channelName ? String(hit.payload.channelName) : undefined,
   }));
 
   // Formatted block — byte-compatible with st-qdrant-memory's formatMemories.
