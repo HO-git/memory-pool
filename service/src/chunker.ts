@@ -196,6 +196,8 @@ export class BotChunker {
       });
     } catch (err) {
       // Back off: 30 s, doubling, at most 15 min between attempts.
+      // Re-check the collection on the next attempt (it may have been deleted).
+      this.ensuredCollections.delete(cfg.collection);
       const failures = (this.failures.get(id) ?? 0) + 1;
       this.failures.set(id, failures);
       const delayMs = Math.min(RETRY_BASE_MS * 2 ** (failures - 1), RETRY_MAX_MS);
