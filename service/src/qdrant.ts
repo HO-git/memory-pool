@@ -44,9 +44,14 @@ export async function ensureCollection(name: string, dimensions: number): Promis
   } catch {
     // fall through to create — same body as st-qdrant-memory
   }
-  await request('PUT', `/collections/${encodeURIComponent(name)}`, {
-    vectors: { size: dimensions, distance: 'Cosine' },
-  });
+  try {
+    await request('PUT', `/collections/${encodeURIComponent(name)}`, {
+      vectors: { size: dimensions, distance: 'Cosine' },
+    });
+  } catch (err) {
+    // Two flushes racing to create a new collection: the loser gets 409.
+    if (!/ 409:/.test((err as Error).message)) throw err;
+  }
 }
 
 export interface SearchHit {

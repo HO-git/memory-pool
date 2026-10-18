@@ -27,8 +27,9 @@ place.
    model ever reads it back.
 2. **One memory across interfaces.** An agent you reach through several
    interfaces keeps one continuous history instead of a separate one per app.
-3. **Recall, if you want it.** Optionally, the agent gets a `recall` tool and
-   searches the pool with its own query when it wants to remember something.
+3. **Recall, if you want it.** Optionally, the agent gets a recall tool
+   (`archive--recall` on Connectome, `recall` on ChapterX) and searches the
+   pool with its own query when it wants to remember something.
    Nothing is added to the prompt automatically: no per-turn clutter, and
    prompt caching is unaffected. Recall is **off by default**.
 
@@ -89,11 +90,13 @@ are welcome as pull requests under `adapters/`.
 
 ## Who gets saved
 
-Only conversations with the users you list (by platform user id). Their
-messages are saved as they arrive, and the agent's replies are saved on turns
-those users started. Other people in the channel, and the agent's autonomous
-activity (heartbeats, timers), stay out of the pool. The service dedups by
-message id, so re-sending is harmless.
+Only conversations between the agent and the users you list (by platform
+user id). On Connectome, a listed user's messages are saved when the agent
+replies to them, together with the reply, in the channel where it happened:
+what they say to other people or other bots never enters the pool. Other
+people in the channel, and the agent's autonomous activity (heartbeats,
+timers), stay out too. The service dedups by message id, so re-sending is
+harmless. See each adapter's README for its exact rule.
 
 ## Web UI and endpoints
 
