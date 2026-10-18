@@ -128,12 +128,14 @@ systemd user unit.
 ## Status
 
 Extracted from a deployment that has run since July 2026: a Connectome
-resident and two ChapterX bots sharing collections with SillyTavern. This
-standalone version (save-first, recall as a tool, open to any interface) was
-tested on 2026-10-07 against connectome-host 0.9.0 / agent-framework 0.21.0
-and ChapterX main (`5d45845`), with a local Qdrant and a stub embedder; see
-each adapter's README. It hasn't yet run in this form against a real
-embeddings provider.
+resident and two ChapterX bots sharing collections with SillyTavern. The
+Connectome module in this form (saving only user↔agent turns, recall as a
+tool, the service's restart-safe save journal) has run live in that
+deployment since 2026-10-18, against connectome-host 0.9.0 / agent-framework
+0.21.0, a remote Qdrant 1.17.1 and real OpenAI embeddings; it also
+type-checks against agent-framework 0.22.2. The ChapterX adapter was last
+tested on 2026-10-07 with a local Qdrant and a stub embedder. Each adapter's
+README has the details.
 
 ## License
 
