@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import type { BotConfig, ChunkPayload, SaveMessage } from './types.ts';
 import { generateEmbedding } from './embeddings.ts';
 import { ensureCollection, upsertPoint } from './qdrant.ts';
@@ -31,6 +32,10 @@ interface Buffer {
 /** Delay before flushing once the buffer passes chunkMinSize (same as the ST extension). */
 const MIN_SIZE_FLUSH_MS = 5_000;
 
+/** Retry backoff for chunks that failed to embed or store. */
+const RETRY_BASE_MS = 30_000;
+const RETRY_MAX_MS = 15 * 60_000;
+
 /**
  * Per-bot save pipeline with st-qdrant-memory chunking semantics:
  * buffer messages; flush immediately at >= chunkMaxSize chars, after 5s
@@ -41,12 +46,48 @@ export class BotChunker {
   private buffers = new Map<string, Buffer>();
   readonly seen: SeenIds;
   private ensuredCollections = new Set<string>();
+  /** Chunks waiting to be embedded and stored, keyed by their point id. */
+  private jobs = new Map<string, { buf: Buffer; collection: string; cfg: BotConfig }>();
+  /** Jobs with an attempt in flight, and failed attempts per job (for backoff). */
+  private running = new Set<string>();
+  private failures = new Map<string, number>();
+  private journalPath: string;
+
+  // Accepted saves survive service restarts and failed embedding requests.
+  // The point id is persisted too, so a retry after an uncertain upsert
+  // overwrites the same point instead of adding a duplicate.
+  private persist(): void {
+    const clean = (buf: Buffer) => ({ ...buf, timer: null });
+    const state = { buffers: [...this.buffers].map(([key, buf]) => [key, clean(buf)]),
+      jobs: [...this.jobs].map(([id, job]) => [id, { ...job, buf: clean(job.buf) }]) };
+    try {
+      writeFileSync(this.journalPath + '.tmp', JSON.stringify(state));
+      renameSync(this.journalPath + '.tmp', this.journalPath);
+    } catch (err) {
+      // Keep saving in memory; only restart-survival is lost.
+      console.error('[chunker] journal write failed:', (err as Error).message);
+    }
+  }
 
   constructor(
     private botName: string,
     private getCfg: () => BotConfig,
   ) {
     this.seen = new SeenIds(botName);
+    const dir = new URL('../data/', import.meta.url).pathname;
+    mkdirSync(dir, { recursive: true });
+    this.journalPath = `${dir}pending-${botName.replace(/[^a-z0-9_-]/gi, '_')}.json`;
+    if (existsSync(this.journalPath)) {
+      try {
+        const state = JSON.parse(readFileSync(this.journalPath, 'utf-8'));
+        this.buffers = new Map(state.buffers || []);
+        this.jobs = new Map(state.jobs || []);
+      } catch (err) {
+        console.error('[chunker] unreadable journal, starting empty:', (err as Error).message);
+      }
+      for (const [key, buf] of this.buffers) this.schedule(key, buf, this.getCfg());
+      for (const id of this.jobs.keys()) void this.runJob(id);
+    }
   }
 
   resolveSpeaker(msg: SaveMessage, cfg: BotConfig): string {
@@ -80,6 +121,7 @@ export class BotChunker {
         ts: msg.ts || Date.now(),
       });
       buf.chars += text.length;
+      this.persist();
       this.seen.addAll([msg.message_id]);
       buffered++;
       this.schedule(key, buf, cfg);
@@ -103,8 +145,18 @@ export class BotChunker {
     if (!buf || buf.messages.length === 0) return;
     this.buffers.delete(key);
     if (buf.timer) clearTimeout(buf.timer);
-
     const cfg = this.getCfg();
+    const id = randomUUID();
+    this.jobs.set(id, { buf: {...buf, timer: null}, collection: cfg.collection, cfg: {...cfg} });
+    this.persist();
+    await this.runJob(id);
+  }
+
+  private async runJob(id: string): Promise<void> {
+    const job = this.jobs.get(id);
+    if (!job || this.running.has(id)) return;
+    this.running.add(id);
+    const { buf, cfg } = job;
     const msgs = buf.messages;
 
     // Chunk text — byte-compatible with st-qdrant-memory:
@@ -132,7 +184,10 @@ export class BotChunker {
         this.ensuredCollections.add(cfg.collection);
       }
       const vector = await generateEmbedding(finalText, cfg.embeddingModel, cfg.embeddingDimensions);
-      await upsertPoint(cfg.collection, randomUUID(), vector, payload as unknown as Record<string, unknown>);
+      await upsertPoint(cfg.collection, id, vector, payload as unknown as Record<string, unknown>);
+      this.jobs.delete(id);
+      this.failures.delete(id);
+      this.persist();
       logActivity({
         kind: 'save',
         bot: this.botName,
@@ -140,17 +195,29 @@ export class BotChunker {
         data: { speakers: payload.speakers, chars: finalText.length, channelId: buf.channelId },
       });
     } catch (err) {
+      // Back off: 30 s, doubling, at most 15 min between attempts.
+      const failures = (this.failures.get(id) ?? 0) + 1;
+      this.failures.set(id, failures);
+      const delayMs = Math.min(RETRY_BASE_MS * 2 ** (failures - 1), RETRY_MAX_MS);
       logActivity({
         kind: 'error',
         bot: this.botName,
-        detail: `save flush failed (chunk dropped): ${(err as Error).message}`,
+        detail: `save flush failed (attempt ${failures}, retrying in ${Math.round(delayMs / 1000)}s): ${(err as Error).message}`,
         data: { messageCount: msgs.length, chars: finalText.length },
       });
+      setTimeout(() => void this.runJob(id), delayMs);
+    } finally {
+      this.running.delete(id);
     }
   }
 
   async flushAll(): Promise<void> {
     await Promise.all([...this.buffers.keys()].map(key => this.flush(key)));
+  }
+
+  /** Chunks accepted but not yet stored (waiting for a first attempt or a retry). */
+  pendingCount(): number {
+    return this.jobs.size;
   }
 
   bufferedCount(): number {

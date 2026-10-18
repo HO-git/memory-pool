@@ -32,6 +32,8 @@ function chunkerFor(bot: string): BotChunker {
 }
 
 watchConfig(() => logActivity({ kind: 'admin', detail: 'config reloaded from disk' }));
+// Restore accepted pending saves immediately, even before the next chat request.
+for (const name of Object.keys(getConfig().bots)) chunkerFor(name);
 
 /** `pool` (memory-pool points) or `st` (SillyTavern points); `discord` is the older name for `pool`. */
 function originParam(value: string | null): 'pool' | 'st' | null {
@@ -141,6 +143,7 @@ async function handleApi(req: Request, url: URL): Promise<Response> {
           autoSave: bot.autoSave,
           collection: bot.collection,
           buffered: chunkers.get(name)?.bufferedCount() ?? 0,
+          pending: chunkers.get(name)?.pendingCount() ?? 0,
           seenIds: chunkers.get(name)?.seen.size() ?? 0,
         }]),
       ),
