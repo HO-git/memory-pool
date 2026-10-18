@@ -57,7 +57,7 @@ agent in `config.json`). If it isn't, the tool says recall is off.
   autonomous turns (heartbeats, timers) are not saved. If the agent doesn't
   answer a message, it's saved with the next reply in that channel. Each save
   is tagged with the channel's platform (`discord`, `zulip`, …) as its
-  `source`, and with the channel's name when the host knows it. Saving never delays a turn; if the service is down, the save is
+  `source`. Saving never delays a turn; if the service is down, the save is
   skipped with a log line.
 - **Replies on tool-using turns.** On a turn that used any tool (including a
   forced first `think`), the framework hands modules the reply as `thoughts`
@@ -65,8 +65,8 @@ agent in `config.json`). If it isn't, the tool says recall is off.
   from there, so these replies are saved too.
 - **Recall** (when enabled). The agent calls `archive--recall` with a query in
   its own words and gets back the closest excerpts, each with its date, where
-  it came from (`discord #general`, `sillytavern`, …), the speakers and a
-  match score.
+  it came from (`discord`, `sillytavern`, …), the speakers and a match
+  score.
   Messages still verbatim in the agent's context are left out: the module
   reads how many messages the last compile kept raw (the active tail,
   runtime overrides included), so the cut follows the tail as it changes.
@@ -93,7 +93,7 @@ agent in `config.json`). If it isn't, the tool says recall is off.
 | connectome-host | 0.9.0 (fork of main, `update-2026-10`), and type-checked against agent-framework 0.22.2 (main @ `b96e918`) |
 | agent-framework | 0.21.0 |
 | Date | 2026-10-18 (and running live since) |
-| How | Loaded through the host's own `loadRecipe` → `loadExtensions` path against a running service, a local Qdrant 1.17.1 and real OpenAI `text-embedding-3-large` embeddings (via OpenRouter). Checked: a forced-think reply (delivered as `thoughts`) saved with the user's message under the configured speaker names; a user talking to someone else, another bot, and a stranger-started turn in a shared channel not saved; the user's mention in a shared channel saved without their earlier unaddressed message; heartbeat speech not saved; a stranger's turn not saved while the user's message waits in another channel; recall leaving out what the active tail still holds, returning it once the tail moved past, falling back to a token budget without render stats, labelling SillyTavern points `sillytavern`, honouring `limit`, and showing channel names (stored on new chunks, looked up from the channel id for older ones). Then deployed live: the first real turn (a forced-think reply) was archived as one chunk with both speakers. The service's search was also run read-only against a real collection shared with SillyTavern. |
+| How | Loaded through the host's own `loadRecipe` → `loadExtensions` path against a running service, a local Qdrant 1.17.1 and real OpenAI `text-embedding-3-large` embeddings (via OpenRouter). Checked: a forced-think reply (delivered as `thoughts`) saved with the user's message under the configured speaker names; a user talking to someone else, another bot, and a stranger-started turn in a shared channel not saved; the user's mention in a shared channel saved without their earlier unaddressed message; heartbeat speech not saved; a stranger's turn not saved while the user's message waits in another channel; recall leaving out what the active tail still holds, returning it once the tail moved past, falling back to a token budget without render stats, labelling SillyTavern points `sillytavern`, honouring `limit`. Then deployed live: the first real turn (a forced-think reply) was archived as one chunk with both speakers. The service's search was also run read-only against a real collection shared with SillyTavern. |
 
 ## Files
 

@@ -1,0 +1,59 @@
+{
+  "global": {
+    "paused": false,
+    "debug": false
+  },
+  "bots": {
+    "polaris": {
+      "enabled": false,
+      "autoSave": true,
+      "collection": "mem_polaris_gpt-5_1",
+      "embeddingModel": "openai/text-embedding-3-large",
+      "embeddingDimensions": 3072,
+      "memoryLimit": 50,
+      "scoreThreshold": 0.3,
+      "minMessageLength": 5,
+      "chunkMinSize": 1200,
+      "chunkMaxSize": 1500,
+      "chunkTimeoutMs": 120000,
+      "selfSpeaker": "Polaris (GPT-5.1)",
+      "speakerAliases": {
+        "705537361987108937": "Helen"
+      }
+    },
+    "mythos": {
+      "enabled": false,
+      "autoSave": true,
+      "collection": "mem_mythos_5",
+      "embeddingModel": "openai/text-embedding-3-large",
+      "embeddingDimensions": 3072,
+      "memoryLimit": 5,
+      "scoreThreshold": 0.3,
+      "minMessageLength": 5,
+      "chunkMinSize": 1200,
+      "chunkMaxSize": 1500,
+      "chunkTimeoutMs": 120000,
+      "selfSpeaker": "Mythos 5",
+      "speakerAliases": {
+        "705537361987108937": "Helen"
+      }
+    },
+    "claudeopus47": {
+      "enabled": false,
+      "autoSave": true,
+      "collection": "mem_claude_opus_4_7",
+      "embeddingModel": "openai/text-embedding-3-large",
+      "embeddingDimensions": 3072,
+      "memoryLimit": 5,
+      "scoreThreshold": 0.3,
+      "minMessageLength": 5,
+      "chunkMinSize": 1200,
+      "chunkMaxSize": 1500,
+      "chunkTimeoutMs": 120000,
+      "selfSpeaker": "Claude Opus 4.7",
+      "speakerAliases": {
+        "705537361987108937": "Helen"
+      }
+    }
+  }
+}
