@@ -25,7 +25,6 @@ interface Buffer {
   source: string;
   chars: number;
   channelId?: string;
-  channelName?: string;
   guildId?: string;
   timer: ReturnType<typeof setTimeout> | null;
 }
@@ -115,7 +114,6 @@ export class BotChunker {
         buf = { messages: [], source, chars: 0, channelId: msg.channel_id, guildId: msg.guild_id, timer: null };
         this.buffers.set(key, buf);
       }
-      if (msg.channel_name) buf.channelName = msg.channel_name;
       buf.messages.push({
         speaker: this.resolveSpeaker(msg, cfg),
         text,
@@ -177,7 +175,6 @@ export class BotChunker {
       isChunk: true,
       source: buf.source,
       ...(buf.channelId ? { channelId: buf.channelId } : {}),
-      ...(buf.channelName ? { channelName: buf.channelName } : {}),
       ...(buf.guildId ? { guildId: buf.guildId } : {}),
     };
 

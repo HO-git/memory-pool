@@ -53,7 +53,6 @@ to the agent's collection.
 | `message_id` | Unique per agent, and stable: the service dedups on it, so re-sending a message is harmless. Prefix it with your source if your ids could collide with another interface's. |
 | `ts` | Unix milliseconds. |
 | `channel_id`, `guild_id` | Optional: where the conversation happened. Messages are chunked per source and channel, so different conversations never interleave. |
-| `channel_name` | Optional: the channel's human-readable name (e.g. `#general`), stored on the chunk so recall can say where it happened. |
 
 Response: `{ "buffered": <n> }`, the number of messages newly accepted. When
 saving is switched off for the agent, `{ "buffered": 0, "skipped": true }`.

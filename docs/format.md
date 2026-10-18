@@ -38,7 +38,6 @@ Payload:
 | `isChunk` | `true` | st-qdrant-memory's chunk marker. |
 | `source` | string | memory-pool only: which interface wrote the point (`"discord"`, `"hermes"`, …). SillyTavern's points have no `source`; st-qdrant-memory ignores the field. It lets memory-pool's points be filtered and bulk-deleted. |
 | `channelId`, `guildId` | string | memory-pool only, optional: where the conversation happened. |
-| `channelName` | string | memory-pool only, optional: the channel's human-readable name when the client knows it (e.g. `#general`). |
 
 ## Speaker names
 
